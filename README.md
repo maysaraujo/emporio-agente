@@ -2,6 +2,29 @@
 
 Protótipo de um agente de atendimento para a Empório da Música, loja fictícia de instrumentos musicais. O agente responde dúvidas de clientes sobre catálogo, preços, pedidos, promoções e políticas da loja, consultando dados reais e aplicando as regras do manual de atendimento.
 
+## Arquitetura
+
+```mermaid
+flowchart TD
+    MSG[Mensagem do usuário] --> AG{Agente}
+    MEM[(Memória da sessão)] <--> AG
+    POL[Políticas no prompt] --> AG
+
+    AG --> RESP[Resposta ao cliente]
+
+    AG --> T1[search_products]
+    AG --> T2[get_order_status]
+    AG --> T3[check_promotion]
+
+    T1 --> DB[(SQLite)]
+    T2 --> DB
+    T3 --> DB
+
+    DB --> AG
+```
+
+O agente recebe a mensagem com o histórico da sessão (memória) e as políticas da loja fixas no prompt. Ele decide entre responder direto, para saudações, dúvidas de política ou itens fora de escopo, ou chamar uma das três ferramentas de consulta, que leem o banco SQLite. O resultado volta ao agente, que redige a resposta final.
+
 ## Como rodar
 
 **Pré-requisitos:** Python 3.10+ e uma chave de API da Groq (gratuita em console.groq.com).
