@@ -1,16 +1,16 @@
-# Agente de Atendimento - Empório da Música
+# Customer Support Agent — Empório da Música
 
-Protótipo de um agente de atendimento para a Empório da Música, loja fictícia de instrumentos musicais. O agente responde dúvidas de clientes sobre catálogo, preços, pedidos, promoções e políticas da loja, consultando dados reais e aplicando as regras do manual de atendimento.
+Prototype of a customer support agent for Empório da Música, a fictional musical instruments store. The agent answers customer questions about the catalog, prices, orders, promotions, and store policies, querying real data and applying the rules from the support manual. The agent itself replies to customers in Portuguese, since that is the store's language; this documentation is in English.
 
-## Arquitetura
+## Architecture
 
 ```mermaid
 flowchart TD
-    MSG[Mensagem do usuário] --> AG{Agente}
-    MEM[(Memória da sessão)] <--> AG
-    POL[Políticas no prompt] --> AG
+    MSG[User message] --> AG{Agent}
+    MEM[(Session memory)] <--> AG
+    POL[Policies in prompt] --> AG
 
-    AG --> RESP[Resposta ao cliente]
+    AG --> RESP[Reply to customer]
 
     AG --> T1[search_products]
     AG --> T2[get_order_status]
@@ -23,90 +23,86 @@ flowchart TD
     DB --> AG
 ```
 
-O agente recebe a mensagem com o histórico da sessão (memória) e as políticas da loja fixas no prompt. Ele decide entre responder direto, para saudações, dúvidas de política ou itens fora de escopo, ou chamar uma das três ferramentas de consulta, que leem o banco SQLite. O resultado volta ao agente, que redige a resposta final.
+The agent receives the message along with the session history (memory) and the store policies, which are fixed in the system prompt. It decides whether to answer directly — for greetings, policy questions, or out-of-scope requests — or to call one of the three query tools, which read the SQLite database. The result returns to the agent, which writes the final reply.
 
-## Como rodar
+## How to run
 
-**Pré-requisitos:** Python 3.10+ e uma chave de API da Groq (gratuita em console.groq.com).
+**Requirements:** Python 3.10+ and a Groq API key (free at console.groq.com).
 
 ```bash
-# 1. clonar e entrar na pasta
-git clone https://github.com/[seu-usuario]/emporio-agente.git
+# 1. clone and enter the folder
+git clone https://github.com/maysaraujo/emporio-agente.git
 cd emporio-agente
 
-# 2. ambiente virtual
+# 2. virtual environment
 python -m venv venv
 source venv/Scripts/activate      # Windows (Git Bash)
 # source venv/bin/activate         # Linux/Mac
 
-# 3. dependências
+# 3. dependencies
 pip install -r requirements.txt
 
-# 4. configurar a chave
-# criar um arquivo .env na raiz com:
-# GROQ_API_KEY=gsk_sua_chave_aqui
+# 4. configure the key
+# create a .env file in the root with:
+# GROQ_API_KEY=gsk_your_key_here
 
-# 5. carregar os dados no banco
+# 5. load the data into the database
 python data/load_data.py
 
-# 6. rodar o agente
+# 6. run the agent
 python main.py
 ```
 
-## Decisões técnicas
+## Technical decisions
 
-**Abordagem: function calling, sem framework.** Optei por function calling puro com o SDK da Groq, em vez de RAG ou de um framework de agentes. Dois motivos: (1) os dados cabem folgado no contexto, os CSVs e o manual de políticas somam poucos milhares de tokens, então indexação vetorial seria complexidade sem ganho; (2) manter o laço do agente escrito à mão me dá controle total e demonstra o entendimento da mecânica, em vez de delegar a orquestração a uma abstração maior que o problema.
+**Approach: function calling, no framework.** I chose plain function calling with the Groq SDK, rather than RAG or an agent framework. Two reasons: (1) the data fits comfortably in the context — the CSVs and the policy manual add up to a few thousand tokens, so vector indexing would be complexity without benefit; (2) writing the agent loop by hand gives me full control and demonstrates an understanding of the mechanics, instead of delegating orchestration to an abstraction larger than the problem.
 
-**Dados estruturados em SQLite, políticas no prompt.** As consultas de catálogo, pedido e promoção são relacionais e com filtro (preço, estoque, categoria), então uso SQLite com SQL parametrizado, mais preciso que busca semântica para esse tipo de pergunta. Já o manual de políticas é texto curto e estável, então fica fixo no prompt do sistema, carregado de um arquivo `policies.md` em tempo de execução (a equipe pode editar as políticas sem tocar no código).
+**Structured data in SQLite, policies in the prompt.** The catalog, order, and promotion queries are relational and filter-based (price, stock, category), so I use SQLite with parameterized SQL — more precise than semantic search for this kind of question. The policy manual, on the other hand, is short and stable text, so it stays fixed in the system prompt, loaded from a `policies.md` file at runtime (the team can edit the policies without touching the code).
 
-**Separação entre dado e política.** A regra central do agente: dados (preço, estoque, disponibilidade) vêm sempre das ferramentas; políticas vêm do manual. O agente nunca afirma preço ou estoque sem consultar o banco.
+**Separation between data and policy.** The agent's core rule: data (price, stock, availability) always comes from the tools; policies come from the manual. The agent never states a price or stock level without querying the database.
 
-**Modelo:** `openai/gpt-oss-120b` via Groq. Escolhi um modelo grande por lidar melhor com a decisão de qual ferramenta chamar e com que argumentos, a parte mais sensível de um agente de function calling. Modelos menores erram mais nessa escolha (ex: usar o filtro de texto no lugar do de categoria), o que gera resposta errada mesmo com os dados certos no banco.
+**Model:** `openai/gpt-oss-120b` via Groq. I chose a large model because it handles the decision of which tool to call, and with which arguments, better — the most sensitive part of a function-calling agent. Smaller models make more mistakes in that choice (e.g., using the text filter instead of the category filter), producing a wrong answer even when the database holds the right data.
 
-**Ferramentas:** três funções de consulta — `search_products` (catálogo, com filtros), `get_order_status` (pedido por código de rastreio) e `check_promotion` (promoção ativa). A busca de pedido é feita **apenas por código de rastreio**, nunca por nome, por privacidade (LGPD); e `check_promotion` filtra `is_active`, para o agente nunca anunciar desconto expirado.
+**Tools:** three query functions — `search_products` (catalog, with filters), `get_order_status` (order by tracking code), and `check_promotion` (active promotion). Order lookup is done **by tracking code only**, never by name, for privacy reasons (LGPD); and `check_promotion` filters `is_active`, so the agent never announces an expired discount.
 
-**Interface:** CLI. O enunciado indica que o foco é o agente funcionando, não a interface, então um CLI entrega interação real com o mínimo de código acessório.
+**Interface:** CLI. The brief states that the focus is the working agent, not the interface, so a CLI delivers real interaction with the least amount of accessory code.
 
-**Memória:** histórico de conversa por sessão, para o agente resolver referências entre turnos. Demonstrado no exemplo de memória, em que o cliente pergunta "o mais barato tem em estoque?" e o agente entende que se refere aos violões do turno anterior, sem o cliente repetir. Não persiste entre sessões.
+**Memory:** per-session conversation history, so the agent can resolve references across turns. Demonstrated in the memory example, where the customer asks "is the cheapest one in stock?" and the agent understands it refers to the guitars from the previous turn, without the customer repeating. It does not persist across sessions — see limitations.
 
-## Suposições
+## Assumptions
 
-O enunciado pede para documentar interpretações onde a informação é ambígua:
+The brief asks to document interpretations where information is ambiguous:
 
-- **Dois telefones no manual.** O manual traz (67) 3341-4444 no cabeçalho e (67) 3321-4500 na seção de WhatsApp. Assumi o 3341-4444 por aparecer em dois lugares contra um.
-- **"Mais de 300 instrumentos".** O manual cita esse número, mas o catálogo real tem 65 produtos. Tratei número de catálogo como dado do banco, nunca do texto institucional, o agente é instruído a não citar quantidades vindas do manual.
+- **Two phone numbers in the manual.** The manual lists (67) 3341-4444 in the header and (67) 3321-4500 in the WhatsApp section. I assumed 3341-4444, as it appears in two places against one.
+- **"More than 300 instruments".** The manual cites this number, but the real catalog has 65 products. I treated the catalog count as database data, never institutional text — the agent is instructed not to cite quantities coming from the manual.
 
-## Limitações conhecidas
+## Known limitations
 
-- **Memória de sessão, não persistente.** Fecha o programa, perde o histórico. Para persistir entre sessões seria preciso identificar o cliente (mesma questão de privacidade do pedido por nome) e serializar os objetos de mensagem. Fora do escopo de um protótipo; seria o próximo passo.
-- **Contexto cresce sem limite.** A cada turno o histórico aumenta, incluindo resultados de ferramenta. Em conversas longas isso pode estourar o limite de tokens. Com mais tempo: cortar turnos antigos mantendo o system, ou resumir o histórico.
-- **Busca textual simples.** Uso `LIKE` no nome e na categoria, não entende sinônimo nem erro de digitação ("violao" sem til). Adequado para o volume, mas não é busca semântica.
+- **Session memory, not persistent.** Close the program and the history is lost. Persisting across sessions would require identifying the customer (the same privacy concern as order-by-name) and serializing the message objects. Out of scope for a prototype; it would be the next step.
+- **Context grows without bound.** Each turn adds to the history, including tool results. In long conversations this can exceed the token limit. With more time: trim old turns while keeping the system message, or summarize the old history.
+- **Simple text search.** I use `LIKE` on the name and category — it does not handle synonyms or typos ("violao" without the accent). Adequate for the volume, but not semantic search.
 
-## Uso de assistentes de código
+## Use of code assistants
 
-- Usei o Claude como par técnico ao longo do projeto, não como gerador de código a copiar.
-- Desenhei a arquitetura antes de codar e questionei as escolhas:
-  - avaliei RAG e descartei (dados cabem no contexto);
-  - avaliei CrewAI e optei por function calling puro;
-  - defini o padrão de nomenclatura (código em inglês, conteúdo do cliente em português);
-  - defini o padrão de commits (Conventional Commits).
-- Depuração baseada em evidência: ao testar, o agente respondeu que não havia
-  ukuleles quando havia; investiguei e descobri que o modelo usava o filtro de
-  texto em vez do de categoria (a palavra "ukulele" não aparece nos nomes dos
-  produtos, só na categoria); corrigi expondo as categorias no schema e tornando
-  a busca textual também sensível à categoria.
-- Testei as ferramentas função a função antes de integrar ao agente.
+- I used Claude as a technical pair throughout the project, not as a code generator to copy from.
+- I designed the architecture before coding and questioned the choices:
+  - evaluated RAG and discarded it (the data fits in the context);
+  - evaluated CrewAI and chose plain function calling;
+  - defined the naming convention (code in English, customer-facing content in Portuguese);
+  - defined the commit convention (Conventional Commits).
+- Evidence-based debugging: while testing, the agent answered that there were no ukuleles when there were; I investigated and found the model was using the text filter instead of the category filter (the word "ukulele" does not appear in product names, only in the category); I fixed it by exposing the categories in the schema and making the text search also match the category.
+- I tested the tools function by function before integrating them into the agent.
 
-## Estrutura
+## Structure
 
 ```
 ├── agent/
-│   ├── tools.py    # as três ferramentas + schemas
-│   ├── prompt.py   # persona, regras e políticas
-│   ├── loop.py     # laço de function calling
-│   └── memory.py   # histórico de conversa
+│   ├── tools.py    # the three tools + schemas
+│   ├── prompt.py   # persona, rules and policies
+│   ├── loop.py     # function-calling loop
+│   └── memory.py   # conversation history
 ├── data/           # CSVs, policies.md, load_data.py → store.db
-├── examples/       # conversas de exemplo
+├── examples/       # example conversations
 ├── main.py         # CLI
 └── README.md
 ```
