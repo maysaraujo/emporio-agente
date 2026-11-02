@@ -22,7 +22,8 @@ def search_products(query=None, category=None, max_price=None, min_price=None):
   params = []
 
   if query:
-    sql += " AND p.name LIKE ?"
+    sql += " AND p.name LIKE ? OR c.name LIKE ?"
+    params.append(f"%{query}%")
     params.append(f"%{query}%")
   if category:
     sql += " AND c.name LIKE ?"
@@ -86,19 +87,25 @@ TOOL_SCHEMAS = [
                 "type": "object",
                 "properties": {
                     "query": {
-                        "type": "string",
+                        "type": ["string", "null"],
                         "description": "Trecho do nome do produto, ex: 'Takamine'",
                     },
                     "category": {
-                        "type": "string",
-                        "description": "Categoria, ex: 'Violões', 'Guitarras', 'Teclados e Pianos'",
+                        "type": ["string", "null"],
+                        "description": (
+                            "Categoria do produto. Valores possíveis: Guitarras, Baixos, "
+                            "Baterias e Percussão, Teclados e Pianos, Violões, "
+                            "Instrumentos de Sopro (Madeiras), Instrumentos de Sopro (Metais), "
+                            "Cordas Orquestrais, Ukuleles. Use este filtro quando o cliente "
+                            "menciona um tipo de instrumento."
+                        ),
                     },
                     "max_price": {
-                        "type": "number",
+                        "type": ["number", "null"],
                         "description": "Preço máximo em reais",
                     },
                     "min_price": {
-                        "type": "number",
+                        "type": ["number", "null"],
                         "description": "Preço mínimo em reais",
                     },
                 },
@@ -118,7 +125,7 @@ TOOL_SCHEMAS = [
                 "type": "object",
                 "properties": {
                     "tracking_code": {
-                        "type": "string",
+                        "type": ["string", "null"],
                         "description": "Código de rastreio, formato BR + 9 caracteres + BR",
                     },
                 },
@@ -138,7 +145,7 @@ TOOL_SCHEMAS = [
                 "type": "object",
                 "properties": {
                     "product_name": {
-                        "type": "string",
+                        "type": ["string", "null"],
                         "description": "Trecho do nome do produto",
                     },
                 },
